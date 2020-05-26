@@ -1,36 +1,37 @@
-use anyhow::Error;
-// use structopt::StructOpt;
+// externs
 
 // modules
-mod client;
+mod accounts;
+mod clients;
+mod states;
 
-// #[derive(Debug, StructOpt)]
-// struct ReqOpt {
-//     uri: Uri,
-// }
+// use
+use accounts::BcaAccount;
+use anyhow::Error;
+use clients::Req;
+use states::AppState;
+use structopt::StructOpt;
 
-#[derive(Copy, Clone, Debug)]
-struct AppState {
-    is_logged_in: bool,
+#[derive(Debug, StructOpt)]
+#[structopt(name = "env")]
+struct ReqOpt {
+    #[structopt(short = "u", env = "BCA_ACCOUNT")]
+    user: String,
+    #[structopt(short = "p", env = "BCA_PASSWORD")]
+    password: String,
 }
 
-impl AppState {
-    fn new() -> Self {
-        AppState{
-            // is logged in to klikbca individual
-            is_logged_in: false,
-        }
-    }
-}
-
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Error> {
-    // let req_opt = ReqOpt::from_args();
-    let app_state = AppState::new();
-    let mut new_client = client::Client::new()?;
+    let opt = ReqOpt::from_args();
+    let mut app_state = AppState::new();
+    let acc = BcaAccount::new(opt.user, opt.password);
+    let mut new_client = Req::new()?;
 
     let pub_ip = new_client.get_pub_ip().await?;
     println!("Current Public IP: {}", pub_ip);
+
+    acc.login(&mut new_client, pub_ip, &mut app_state).await?;
 
     Ok(())
 }
