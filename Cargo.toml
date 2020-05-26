@@ -1,0 +1,15 @@
+[package]
+name = "bca-rust"
+version = "0.1.0"
+authors = ["winwisely268 <winwisely268@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+isahc = { version = "^0.9", features = ["cookies"] }
+async-std = { version = "^1", features = ["attributes"] }
+structopt = "^0.3"
+anyhow = "^1.0"
+scraper = "^0.12"
+http = "^0.2"
