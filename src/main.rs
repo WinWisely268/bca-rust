@@ -32,6 +32,7 @@ async fn main() -> Result<(), Error> {
     println!("Current Public IP: {}", pub_ip);
 
     acc.login(&mut new_client, pub_ip, &mut app_state).await?;
+    acc.logout(&mut new_client, &mut app_state).await?;
 
     Ok(())
 }

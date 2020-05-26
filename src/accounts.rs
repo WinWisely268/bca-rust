@@ -36,9 +36,17 @@ impl BcaAccount {
             ("mobile", "true"),
         ];
         client.set_url(Endpoints::LoginAction);
-        let resp = client.post_form(params).await?;
+        let resp = client.post(Some(params)).await?;
         println!("{}", resp);
         state.toggle_login();
-        Ok("".to_string())
+        Ok(resp)
+    }
+
+    pub async fn logout(&self, client: &mut Req, state: &mut AppState) -> Result<String, Error> {
+        client.set_url(Endpoints::LogoutAction);
+        let resp = client.post(None).await?;
+        println!("{}", resp);
+        state.toggle_login();
+        Ok(resp)
     }
 }

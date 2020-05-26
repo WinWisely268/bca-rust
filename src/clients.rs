@@ -1,9 +1,9 @@
 use anyhow::Error;
 use http::Uri;
-use reqwest::{header, header::HeaderMap, Client, ClientBuilder};
+use reqwest::{header, header::HeaderMap, Client, ClientBuilder, Response};
 
 pub enum Endpoints {
-    Login,
+    // Login,
     LoginAction,
     LogoutAction,
     PubIp,
@@ -14,7 +14,7 @@ pub enum Endpoints {
 fn endpoint_url(e: Endpoints) -> Uri {
     let base_url = "https://m.klikbca.com/";
     match e {
-        Endpoints::Login => [base_url, "login.jsp"].concat().parse::<Uri>().unwrap(),
+        // Endpoints::Login => [base_url, "login.jsp"].concat().parse::<Uri>().unwrap(),
         Endpoints::LoginAction => [base_url, "authentication.do"]
             .concat()
             .parse::<Uri>()
@@ -107,6 +107,10 @@ impl Req {
         self
     }
 
+    fn get_uri_string(&self) -> String {
+        format!("{}", self.uri)
+    }
+
     // Gets current public ip
     pub async fn get_pub_ip(&mut self) -> Result<String, Error> {
         self.set_url(Endpoints::PubIp);
@@ -120,17 +124,21 @@ impl Req {
 
     // Async GET
     pub async fn get(&self) -> Result<String, Error> {
-        let url: String = format!("{}", self.uri);
-        let get_url: &str = url.as_str();
+        let url: String = self.get_uri_string();
+        let get_url = url.as_str();
         let resp = self.hc.get(get_url).send().await?;
         Ok(resp.text().await?)
     }
 
-    // Async POST, takes body (can be a string literal)
-    pub async fn post_form(&self, form: Vec<(&str, &str)>) -> Result<String, Error> {
-        let url: String = format!("{}", self.uri);
-        let post_url: &str = url.as_str();
-        let resp = self.hc.post(post_url).form(&form).send().await?;
+    // Async POST, can take optional form
+    pub async fn post(&self, form: Option<Vec<(&str, &str)>>) -> Result<String, Error> {
+        let url: String = self.get_uri_string();
+        let post_url = url.as_str();
+        let resp: Response;
+        match form {
+            Some(f) => resp = self.hc.post(post_url).form(&f).send().await?,
+            None => resp = self.hc.post(post_url).send().await?,
+        }
         Ok(resp.text().await?)
     }
 }
