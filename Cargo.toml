@@ -9,13 +9,14 @@ edition = "2018"
 [dependencies]
 structopt = "^0.3"
 anyhow = "^1.0"
-scraper = "^0.12"
+selectors = "^0.22"
 http = "^0.2"
+url = "^2"
 
-[dependencies.reqwest]
-version = "^0.10"
+[dependencies.isahc]
+version = "^0.9"
 features = ["cookies"]
 
-[dependencies.tokio]
-version = "^0.2"
-features = ["full"]
+[dependencies.async-std]
+version = "^1"
+features = ["attributes"]

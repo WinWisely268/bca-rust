@@ -1,6 +1,7 @@
-use anyhow::Error;
-use http::Uri;
-use reqwest::{header, header::HeaderMap, Client, ClientBuilder, Response};
+use anyhow::{anyhow, Result};
+use isahc::prelude::*;
+use isahc::{HttpClient, RequestExt};
+use url::{Url, form_urlencoded};
 
 pub enum Endpoints {
     // Login,
@@ -10,135 +11,103 @@ pub enum Endpoints {
     Saldo,
 }
 
+fn build_url<I>(base: &str, path: I) -> Result<Url>
+where
+I: IntoIterator,
+I::Item: AsRef<str>,
+{
+    let mut url = Url::parse(base)?;
+    url.path_segments_mut()
+        .map_err(|_| anyhow!("cannot be base"))?
+        .extend(path);
+    Ok(url)
+}
+
 // get endpoint url from Endpoints enum
-fn endpoint_url(e: Endpoints) -> Uri {
+pub fn endpoint_url(e: Endpoints) -> Result<Url> {
     let base_url = "https://m.klikbca.com/";
     match e {
-        // Endpoints::Login => [base_url, "login.jsp"].concat().parse::<Uri>().unwrap(),
-        Endpoints::LoginAction => [base_url, "authentication.do"]
-            .concat()
-            .parse::<Uri>()
-            .unwrap(),
-        Endpoints::LogoutAction => [base_url, "authentication.do?value=(actions)=logout"]
-            .concat()
-            .parse::<Uri>()
-            .unwrap(),
-        Endpoints::Saldo => [base_url, "balanceinquiry.do"]
-            .concat()
-            .parse::<Uri>()
-            .unwrap(),
-        Endpoints::PubIp => "http://icanhazip.com".parse::<Uri>().unwrap(),
+        Endpoints::LoginAction => build_url(base_url, &["authentication.do"]),
+        Endpoints::LogoutAction => build_url(base_url,
+                                             &["authentication.do?value=(actions)=logout"]),
+        Endpoints::Saldo => build_url(base_url, &["balanceinquiry.do"]),
+        Endpoints::PubIp => build_url("http://icanhazip.com", &[""]),
     }
 }
 
 // build http client with default headers and cookies support
-fn build_client() -> Result<Client, Error> {
-    let mut default_headers = HeaderMap::new();
+fn default_headers() -> http::HeaderMap {
+    let mut default_headers = http::HeaderMap::new();
     default_headers.insert(
-        header::HOST,
-        "m.klikbca.com".parse().expect("Invalid HOST value"),
-    );
-    default_headers.insert(
-        header::CONNECTION,
-        "keepalive".parse().expect("Invalid keepalive header"),
-    );
-    default_headers.insert(
-        header::CACHE_CONTROL,
-        "max-age=0".parse().expect("Invalid max-age"),
-    );
-    default_headers.insert(
-        header::UPGRADE_INSECURE_REQUESTS,
+        http::header::UPGRADE_INSECURE_REQUESTS,
         "1".parse().expect("Invalid insecure request upgrade"),
-    );
+        );
     default_headers.insert(
-        header::USER_AGENT,
-        "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/46.0.2490.76 Mobile Safari/537.36"
+        http::header::USER_AGENT,
+        "Mozilla/5.0 (Linux; Android 9; 5032W) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.136 Mobile Safari/537.36"
         .parse().expect("Invalid UA"),
-    );
-    default_headers.insert(
-        header::ACCEPT,
-        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
-            .parse()
-            .expect("Invalid accept"),
-    );
-    default_headers.insert(
-        header::ACCEPT_ENCODING,
-        "gzip, deflate, sdch, br"
-            .parse()
-            .expect("Invalid accept encoding"),
-    );
-    default_headers.insert(
-        header::ACCEPT_LANGUAGE,
-        "en-US,en;q=0.8,id;q=0.6,fr;q=0.4"
-            .parse()
-            .expect("Invalid accept language"),
-    );
-
-    let cb = ClientBuilder::new()
-        .default_headers(default_headers)
-        .cookie_store(true)
-        .build()?;
-    Ok(cb)
+        );
+    default_headers
 }
 
 // Req is the reusable http client for the entire program.
 // consists of the reusable http client itself, the uri (mutable), and the body (to be used for
 // POST, PUT methods).
 #[derive(Debug)]
-pub struct Req {
-    // hc is reqwest::Client
-    hc: Client,
-    // uri -> url for operation (this is mutable)
-    uri: Uri,
+pub struct Client {
+    // hc is isahc::Client
+    hc: HttpClient,
 }
 
-impl Req {
+impl Client {
     // Create default Client struct
-    pub fn new() -> Result<Self, Error> {
-        let client = build_client()?;
-        Ok(Req {
+    pub fn new() -> Result<Self> {
+        let client = HttpClient::builder()
+            .cookies()
+            .default_headers(&default_headers())
+            .build()?;
+        Ok(Client {
             hc: client,
-            uri: "https://m.klikbca.com".parse::<Uri>().unwrap(),
         })
     }
-    // Client.set_url() sets the current url to the specified Endpoint
-    pub fn set_url(&mut self, ep: Endpoints) -> &Self {
-        self.uri = endpoint_url(ep);
-        self
+
+    pub async fn get(&self, u: &Url) -> Result<String> {
+        let mut resp = self.hc.get_async(u.as_str()).await?;
+        println!("Response headers: {:?}", resp.headers());
+        Ok(resp.text_async().await?)
     }
 
-    fn get_uri_string(&self) -> String {
-        format!("{}", self.uri)
-    }
+    pub async fn post(&self, u: Url) -> Result<String> {
 
+    }
     // Gets current public ip
-    pub async fn get_pub_ip(&mut self) -> Result<String, Error> {
-        self.set_url(Endpoints::PubIp);
-        let pub_ip_string = self.get().await?;
-        let ip = pub_ip_string
-            .chars()
-            .filter(|c| !c.is_whitespace())
-            .collect::<String>();
-        Ok(ip)
-    }
+    // pub async fn get_pub_ip(&mut self) -> Result<String, Error> {
+    //     self.set_url(Endpoints::PubIp);
+    //     let pub_ip_string = self.get().await?;
+    //     let ip = pub_ip_string
+    //         .chars()
+    //         .filter(|c| !c.is_whitespace())
+    //         .collect::<String>();
+    //     Ok(ip)
+    // }
 
     // Async GET
-    pub async fn get(&self) -> Result<String, Error> {
-        let url: String = self.get_uri_string();
-        let get_url = url.as_str();
-        let resp = self.hc.get(get_url).send().await?;
-        Ok(resp.text().await?)
-    }
+    // pub async fn get(&self) -> Result<String, Error> {
+    //     let url: String = self.get_uri_string();
+    //     let get_url = url.as_str();
+    //     let resp = self.hc.get(get_url).send().await?;
+    //     Ok(resp.text().await?)
+    // }
 
     // Async POST, can take optional form
-    pub async fn post(&self, form: Option<Vec<(&str, &str)>>) -> Result<String, Error> {
-        let url: String = self.get_uri_string();
-        let post_url = url.as_str();
-        let resp: Response;
-        match form {
-            Some(f) => resp = self.hc.post(post_url).form(&f).send().await?,
-            None => resp = self.hc.post(post_url).send().await?,
-        }
-        Ok(resp.text().await?)
-    }
+    // pub async fn post(&self, form: Option<Vec<(&str, &str)>>) -> Result<String, Error> {
+    //     let url: String = self.get_uri_string();
+    //     let post_url = url.as_str();
+    //     let resp: Response;
+    //     match form {
+    //         Some(f) => resp = self.hc.post(post_url).form(&f).send().await?,
+    //         None => resp = self.hc.post(post_url).send().await?,
+    //     }
+    //     Ok(resp.text().await?)
+    // }
 }
