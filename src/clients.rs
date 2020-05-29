@@ -1,10 +1,10 @@
+use crate::cookies::{Cookie, CookieJar};
 use anyhow::{anyhow, Result};
+use http::header::SET_COOKIE;
 use isahc::prelude::*;
-use isahc::{HttpClient, RequestExt};
-use url::{Url, form_urlencoded};
+use url::{form_urlencoded, Url};
 
 pub enum Endpoints {
-    // Login,
     LoginAction,
     LogoutAction,
     PubIp,
@@ -13,8 +13,8 @@ pub enum Endpoints {
 
 fn build_url<I>(base: &str, path: I) -> Result<Url>
 where
-I: IntoIterator,
-I::Item: AsRef<str>,
+    I: IntoIterator,
+    I::Item: AsRef<str>,
 {
     let mut url = Url::parse(base)?;
     url.path_segments_mut()
@@ -28,26 +28,12 @@ pub fn endpoint_url(e: Endpoints) -> Result<Url> {
     let base_url = "https://m.klikbca.com/";
     match e {
         Endpoints::LoginAction => build_url(base_url, &["authentication.do"]),
-        Endpoints::LogoutAction => build_url(base_url,
-                                             &["authentication.do?value=(actions)=logout"]),
+        Endpoints::LogoutAction => {
+            build_url(base_url, &["authentication.do?value=(actions)=logout"])
+        }
         Endpoints::Saldo => build_url(base_url, &["balanceinquiry.do"]),
         Endpoints::PubIp => build_url("http://icanhazip.com", &[""]),
     }
-}
-
-// build http client with default headers and cookies support
-fn default_headers() -> http::HeaderMap {
-    let mut default_headers = http::HeaderMap::new();
-    default_headers.insert(
-        http::header::UPGRADE_INSECURE_REQUESTS,
-        "1".parse().expect("Invalid insecure request upgrade"),
-        );
-    default_headers.insert(
-        http::header::USER_AGENT,
-        "Mozilla/5.0 (Linux; Android 9; 5032W) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.136 Mobile Safari/537.36"
-        .parse().expect("Invalid UA"),
-        );
-    default_headers
 }
 
 // Req is the reusable http client for the entire program.
@@ -55,59 +41,117 @@ fn default_headers() -> http::HeaderMap {
 // POST, PUT methods).
 #[derive(Debug)]
 pub struct Client {
-    // hc is isahc::Client
-    hc: HttpClient,
+    cstore: CookieJar,
 }
 
 impl Client {
     // Create default Client struct
     pub fn new() -> Result<Self> {
-        let client = HttpClient::builder()
-            .cookies()
-            .default_headers(&default_headers())
-            .build()?;
-        Ok(Client {
-            hc: client,
-        })
+        let cstore = CookieJar::default();
+        Ok(Client { cstore })
     }
 
-    pub async fn get(&self, u: &Url) -> Result<String> {
-        let mut resp = self.hc.get_async(u.as_str()).await?;
+    fn add_default_headers(&self, mut request: Request<Body>) -> Request<Body> {
+        request.headers_mut()
+            .insert(
+        http::header::USER_AGENT,
+        "Mozilla/5.0 (Linux; Android 9; 5032W) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.136 Mobile Safari/537.36".parse().unwrap(),
+        );
+
+        request.headers_mut().insert(
+            http::header::UPGRADE_INSECURE_REQUESTS,
+            "1".parse().unwrap(),
+        );
+
+        println!("Adds default request headers: {:?}", request.headers());
+        request
+    }
+
+    fn add_cookie_header(&self, mut request: Request<Body>) -> Request<Body> {
+        if let Some(header) = self.cstore.get_cookies(request.uri()) {
+            request
+                .headers_mut()
+                .insert(http::header::COOKIE, header.parse().unwrap());
+        }
+        println!("Added cookie header: {:?}", request.headers());
+        request
+    }
+
+    fn save_response_to_cookie(&mut self, resp: Response<Body>) -> Response<Body> {
+        if resp.headers().contains_key(SET_COOKIE) {
+            let cookies = resp
+                .headers()
+                .get_all(SET_COOKIE)
+                .into_iter()
+                .filter_map(|h| {
+                    h.to_str().ok().or_else(|| {
+                        tracing::warn!("invalid Set-Cookie encoding");
+                        None
+                    })
+                })
+                .filter_map(|h| {
+                    resp.effective_uri()
+                        .and_then(|uri| Cookie::parse(h, uri))
+                        .or_else(|| {
+                            tracing::warn!("could not parse Set-Cookie header");
+                            None
+                        })
+                });
+            self.cstore.add(cookies)
+        }
+        resp
+    }
+
+    pub fn simple_get(&self, u: &Url) -> Result<String> {
+        let mut req = Request::get(u.as_str()).body(Body::empty())?;
+        req = self.add_default_headers(req);
+        let mut resp = req.send()?;
+        Ok(resp.text()?)
+    }
+
+    pub fn get(&mut self, u: &Url) -> Result<String> {
+        let mut req = Request::get(u.as_str())
+            .redirect_policy(isahc::config::RedirectPolicy::Limit(10))
+            .auto_referer()
+            .body(Body::empty())?;
+        req = self.add_default_headers(req);
+        req = self.add_cookie_header(req);
+        let mut resp = req.send()?;
         println!("Response headers: {:?}", resp.headers());
-        Ok(resp.text_async().await?)
+        let text = resp.text()?;
+        self.save_response_to_cookie(resp);
+        Ok(text)
     }
 
-    pub async fn post(&self, u: Url) -> Result<String> {
-
+    pub fn post<I, K, V>(&mut self, u: &Url, form: Option<I>) -> Result<String>
+    where
+        I: IntoIterator,
+        I::Item: core::borrow::Borrow<(K, V)>,
+        K: AsRef<str>,
+        V: AsRef<str>,
+    {
+        let mut req: Request<Body>;
+        match form {
+            Some(f) => {
+                let mut form_data = form_urlencoded::Serializer::new(String::new());
+                form_data.extend_pairs(f);
+                let form_string: String = form_data.finish().into();
+                req = Request::post(u.as_str())
+                    .redirect_policy(isahc::config::RedirectPolicy::Limit(10))
+                    .body(Body::from_bytes(form_string.into_bytes()))?;
+            }
+            None => {
+                req = Request::post(u.as_str())
+                    .redirect_policy(isahc::config::RedirectPolicy::Limit(10))
+                    .body(Body::empty())?;
+            }
+        }
+        req = self.add_default_headers(req);
+        req = self.add_cookie_header(req);
+        let mut resp = req.send()?;
+        println!("Response header: {:?}", resp.headers());
+        let text = resp.text()?;
+        self.save_response_to_cookie(resp);
+        Ok(text)
     }
-    // Gets current public ip
-    // pub async fn get_pub_ip(&mut self) -> Result<String, Error> {
-    //     self.set_url(Endpoints::PubIp);
-    //     let pub_ip_string = self.get().await?;
-    //     let ip = pub_ip_string
-    //         .chars()
-    //         .filter(|c| !c.is_whitespace())
-    //         .collect::<String>();
-    //     Ok(ip)
-    // }
-
-    // Async GET
-    // pub async fn get(&self) -> Result<String, Error> {
-    //     let url: String = self.get_uri_string();
-    //     let get_url = url.as_str();
-    //     let resp = self.hc.get(get_url).send().await?;
-    //     Ok(resp.text().await?)
-    // }
-
-    // Async POST, can take optional form
-    // pub async fn post(&self, form: Option<Vec<(&str, &str)>>) -> Result<String, Error> {
-    //     let url: String = self.get_uri_string();
-    //     let post_url = url.as_str();
-    //     let resp: Response;
-    //     match form {
-    //         Some(f) => resp = self.hc.post(post_url).form(&f).send().await?,
-    //         None => resp = self.hc.post(post_url).send().await?,
-    //     }
-    //     Ok(resp.text().await?)
-    // }
 }

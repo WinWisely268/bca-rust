@@ -1,7 +1,7 @@
 // Global AppState
 #[derive(Copy, Clone, Debug)]
 pub struct AppState {
-    is_logged_in: bool,
+    pub is_logged_in: bool,
 }
 
 impl AppState {

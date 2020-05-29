@@ -2,13 +2,14 @@
 
 // modules
 mod accounts;
+mod cookies;
 mod clients;
 mod states;
 
 // use
 use accounts::BcaAccount;
-use anyhow::Error;
-use clients::Req;
+use anyhow::Result;
+use clients::Client;
 use states::AppState;
 use structopt::StructOpt;
 
@@ -21,18 +22,14 @@ struct ReqOpt {
     password: String,
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Error> {
+fn main() -> Result<()> {
     let opt = ReqOpt::from_args();
     let mut app_state = AppState::new();
     let acc = BcaAccount::new(opt.user, opt.password);
-    let mut new_client = Req::new()?;
+    let mut new_client = Client::new()?;
 
-    let pub_ip = new_client.get_pub_ip().await?;
-    println!("Current Public IP: {}", pub_ip);
-
-    acc.login(&mut new_client, pub_ip, &mut app_state).await?;
-    acc.logout(&mut new_client, &mut app_state).await?;
+    acc.login(&mut new_client, &mut app_state)?;
+    acc.get_saldo(&mut new_client, &mut app_state)?;
 
     Ok(())
 }

@@ -1,0 +1,13 @@
+Host: m.klikbca.com
+User-Agent: Mozilla/5.0 (iPhone; CPU OS 10_15_4 Supplemental Update like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.1.1 Mobile/14E304 Safari/605.1.15
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate, br
+Referer: https://m.klikbca.com/login.jsp
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 398
+Origin: https://m.klikbca.com
+DNT: 1
+Connection: keep-alive
+Cookie: Cookie-NS-Mklikbca=ffffffff091834e145525d5f4f58455e445a4a42378b; JSESSIONID=kAtc0BO00Mzg3cc7qRO1FcDL2wGWsF63cqzQTY_Jf6QpMH0Rrpd4!-1554411305
+Upgrade-Insecure-Requests: 1

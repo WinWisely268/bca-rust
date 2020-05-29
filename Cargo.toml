@@ -12,11 +12,16 @@ anyhow = "^1.0"
 selectors = "^0.22"
 http = "^0.2"
 url = "^2"
+chrono = "^0.4"
 
 [dependencies.isahc]
 version = "^0.9"
-features = ["cookies"]
+features = ["middleware-api-preview"]
 
 [dependencies.async-std]
 version = "^1"
 features = ["attributes"]
+
+[dependencies.tracing]
+version = "0.1.14"
+features = ["log"]

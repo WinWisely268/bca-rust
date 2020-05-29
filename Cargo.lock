@@ -79,10 +79,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-std",
+ "chrono",
  "http",
  "isahc",
  "selectors",
  "structopt",
+ "tracing",
  "url",
 ]
 
@@ -459,7 +461,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "098c47b6176a9b667292810105999d6029d8338819f299584677e8a125e549c2"
 dependencies = [
  "bytes",
- "chrono",
  "crossbeam-channel",
  "crossbeam-utils",
  "curl",
