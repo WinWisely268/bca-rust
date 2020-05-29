@@ -19,7 +19,7 @@ impl BcaAccount {
         }
     }
 
-    pub fn get_pub_ip(&self, client: &mut Client) -> Result<String> {
+    fn get_pub_ip(&self, client: &mut Client) -> Result<String> {
         let pub_ip_url = epu(Endpoints::PubIp)?;
         let resp = client.simple_get(&pub_ip_url)?;
         let ip = resp
@@ -35,6 +35,8 @@ impl BcaAccount {
         state: &mut AppState,
     ) -> Result<String> {
         let ip = self.get_pub_ip(client)?;
+        let loginform_url = epu(Endpoints::Login)?;
+        client.get(&loginform_url)?;
         let params: Vec<(&str, &str)> = vec![
             ("value(user_id)", self.user),
             ("value(pswd)", self.password),
@@ -45,7 +47,7 @@ impl BcaAccount {
             ("value(mobile)", "true"),
             ("mobile", "true"),
         ];
-        let login_url = epu(Endpoints::LoginAction)?;
+        let login_url = epu(Endpoints::Authentication)?;
         let resp = client.post(&login_url, Some(params))?;
         println!("{}", resp);
         state.toggle_login();
@@ -56,15 +58,18 @@ impl BcaAccount {
         if !state.is_logged_in {
             self.login(client, state)?;
         }
-        let saldo_url = epu(Endpoints::Saldo)?;
-        let resp = client.get(&saldo_url)?;
+        let main_menu_url = epu(Endpoints::AccountStatement)?;
+        let params = vec![("value(actions)", "menu")];
+        client.post(&main_menu_url, Some(params))?;
+        let saldo_url = epu(Endpoints::BalanceInquiry)?;
+        let resp = client.post(&saldo_url, None::<Vec<(&str, &str)>>)?;
         println!("{}", resp);
         Ok(resp)
     }
 
     pub fn logout(&self, client: &mut Client, state: &mut AppState) -> Result<String> {
-        let logout_url = epu(Endpoints::LogoutAction)?;
-        let resp = client.post(&logout_url, None::<Vec<(&str, &str)>>)?;
+        let logout_url = epu(Endpoints::Authentication)?;
+        let resp = client.get(&logout_url)?;
         println!("{}", resp);
         state.toggle_login();
         Ok(resp)

@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 structopt = "^0.3"
 anyhow = "^1.0"
-selectors = "^0.22"
+scraper = "^0.12"
 http = "^0.2"
 url = "^2"
 chrono = "^0.4"

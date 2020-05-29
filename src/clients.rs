@@ -1,20 +1,21 @@
-use crate::cookies::{Cookie, CookieJar};
+use crate::cookies::{CookieJar};
 use anyhow::{anyhow, Result};
-use http::header::SET_COOKIE;
 use isahc::prelude::*;
 use url::{form_urlencoded, Url};
 
 pub enum Endpoints {
-    LoginAction,
-    LogoutAction,
+    Login,
+    Authentication,
+    AccountStatement,
+    BalanceInquiry,
     PubIp,
-    Saldo,
 }
 
-fn build_url<I>(base: &str, path: I) -> Result<Url>
+// creates & validates url from string literal
+pub fn build_url<I>(base: &str, path: I) -> Result<Url>
 where
-    I: IntoIterator,
-    I::Item: AsRef<str>,
+I: IntoIterator,
+I::Item: AsRef<str>,
 {
     let mut url = Url::parse(base)?;
     url.path_segments_mut()
@@ -27,13 +28,57 @@ where
 pub fn endpoint_url(e: Endpoints) -> Result<Url> {
     let base_url = "https://m.klikbca.com/";
     match e {
-        Endpoints::LoginAction => build_url(base_url, &["authentication.do"]),
-        Endpoints::LogoutAction => {
-            build_url(base_url, &["authentication.do?value=(actions)=logout"])
-        }
-        Endpoints::Saldo => build_url(base_url, &["balanceinquiry.do"]),
+        Endpoints::Login => build_url(base_url, &["login.jsp"]),
+        Endpoints::Authentication => build_url(base_url, &["authentication.do"]),
+        Endpoints::AccountStatement => {
+            build_url(base_url, &["accountstmt.do"])
+        },
+        Endpoints::BalanceInquiry => build_url(base_url, &["balanceinquiry.do"]),
         Endpoints::PubIp => build_url("http://icanhazip.com", &[""]),
     }
+}
+
+// produces default headers for the reusable http client.
+fn default_headermap() -> http::HeaderMap {
+    let mut new_headers = http::HeaderMap::new();
+    new_headers
+        .insert(
+            http::header::USER_AGENT,
+            "Mozilla/5.0 (iPhone; CPU OS 10_15_4 Supplemental Update like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.1.1 Mobile/14E304 Safari/605.1.15".parse().unwrap(),
+            );
+
+    new_headers.insert(
+        http::header::UPGRADE_INSECURE_REQUESTS,
+        "1".parse().unwrap(),
+        );
+
+    new_headers.insert(
+        http::header::ORIGIN,
+        "https://m.klikbca.com".parse().unwrap(),
+        );
+
+    new_headers.insert(
+        http::header::HOST,
+        "m.klikbca.com".parse().unwrap(),
+        );
+
+    new_headers.insert(
+        http::header::ACCEPT,
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8".parse().unwrap(),
+        );
+
+    new_headers.insert(
+        http::header::ACCEPT_LANGUAGE,
+        "en-US,en;q=0.5".parse().unwrap(),
+        );
+
+    new_headers.insert(
+        http::header::ACCEPT_ENCODING,
+        "gzip, deflate, br".parse().unwrap(),
+        );
+
+    new_headers
+
 }
 
 // Req is the reusable http client for the entire program.
@@ -41,117 +86,68 @@ pub fn endpoint_url(e: Endpoints) -> Result<Url> {
 // POST, PUT methods).
 #[derive(Debug)]
 pub struct Client {
-    cstore: CookieJar,
+    c: HttpClient,
 }
 
 impl Client {
     // Create default Client struct
     pub fn new() -> Result<Self> {
-        let cstore = CookieJar::default();
-        Ok(Client { cstore })
+        let c = HttpClient::builder()
+            .redirect_policy(isahc::config::RedirectPolicy::Limit(10))
+            .default_headers(&default_headermap())
+            .middleware(CookieJar::default())
+            .tcp_keepalive(std::time::Duration::from_secs(300))
+            .auto_referer()
+            .build()?;
+        Ok(Client{ c })
     }
 
-    fn add_default_headers(&self, mut request: Request<Body>) -> Request<Body> {
-        request.headers_mut()
-            .insert(
-        http::header::USER_AGENT,
-        "Mozilla/5.0 (Linux; Android 9; 5032W) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.136 Mobile Safari/537.36".parse().unwrap(),
-        );
-
-        request.headers_mut().insert(
-            http::header::UPGRADE_INSECURE_REQUESTS,
-            "1".parse().unwrap(),
-        );
-
-        println!("Adds default request headers: {:?}", request.headers());
-        request
-    }
-
-    fn add_cookie_header(&self, mut request: Request<Body>) -> Request<Body> {
-        if let Some(header) = self.cstore.get_cookies(request.uri()) {
-            request
-                .headers_mut()
-                .insert(http::header::COOKIE, header.parse().unwrap());
-        }
-        println!("Added cookie header: {:?}", request.headers());
-        request
-    }
-
-    fn save_response_to_cookie(&mut self, resp: Response<Body>) -> Response<Body> {
-        if resp.headers().contains_key(SET_COOKIE) {
-            let cookies = resp
-                .headers()
-                .get_all(SET_COOKIE)
-                .into_iter()
-                .filter_map(|h| {
-                    h.to_str().ok().or_else(|| {
-                        tracing::warn!("invalid Set-Cookie encoding");
-                        None
-                    })
-                })
-                .filter_map(|h| {
-                    resp.effective_uri()
-                        .and_then(|uri| Cookie::parse(h, uri))
-                        .or_else(|| {
-                            tracing::warn!("could not parse Set-Cookie header");
-                            None
-                        })
-                });
-            self.cstore.add(cookies)
-        }
-        resp
-    }
 
     pub fn simple_get(&self, u: &Url) -> Result<String> {
-        let mut req = Request::get(u.as_str()).body(Body::empty())?;
-        req = self.add_default_headers(req);
-        let mut resp = req.send()?;
+        let req = Request::get(u.as_str()).body(Body::empty())?;
+        let mut resp = self.c.send(req)?;
         Ok(resp.text()?)
     }
 
     pub fn get(&mut self, u: &Url) -> Result<String> {
-        let mut req = Request::get(u.as_str())
-            .redirect_policy(isahc::config::RedirectPolicy::Limit(10))
-            .auto_referer()
+        let req = Request::get(u.as_str())
+            .redirect_policy(isahc::config::RedirectPolicy::Limit(2))
+            .tcp_keepalive(std::time::Duration::from_secs(3600))
             .body(Body::empty())?;
-        req = self.add_default_headers(req);
-        req = self.add_cookie_header(req);
-        let mut resp = req.send()?;
+        println!("Request headers: {:?}", req.headers());
+        let mut resp = self.c.send(req)?;
         println!("Response headers: {:?}", resp.headers());
-        let text = resp.text()?;
-        self.save_response_to_cookie(resp);
-        Ok(text)
+        Ok(resp.text()?)
     }
 
     pub fn post<I, K, V>(&mut self, u: &Url, form: Option<I>) -> Result<String>
-    where
+        where
         I: IntoIterator,
         I::Item: core::borrow::Borrow<(K, V)>,
         K: AsRef<str>,
         V: AsRef<str>,
-    {
-        let mut req: Request<Body>;
-        match form {
-            Some(f) => {
-                let mut form_data = form_urlencoded::Serializer::new(String::new());
-                form_data.extend_pairs(f);
-                let form_string: String = form_data.finish().into();
-                req = Request::post(u.as_str())
-                    .redirect_policy(isahc::config::RedirectPolicy::Limit(10))
-                    .body(Body::from_bytes(form_string.into_bytes()))?;
+        {
+            let req: Request<Body>;
+            match form {
+                Some(f) => {
+                    let mut form_data = form_urlencoded::Serializer::new(String::new());
+                    form_data.extend_pairs(f);
+                    let form_string: String = form_data.finish().into();
+                    req = Request::post(u.as_str())
+                        .redirect_policy(isahc::config::RedirectPolicy::Limit(5))
+                        .tcp_keepalive(std::time::Duration::from_secs(3600))
+                        .body(Body::from_bytes(form_string.into_bytes()))?;
+                }
+                None => {
+                    req = Request::post(u.as_str())
+                        .redirect_policy(isahc::config::RedirectPolicy::Limit(5))
+                        .tcp_keepalive(std::time::Duration::from_secs(3600))
+                        .body(Body::empty())?;
+                }
             }
-            None => {
-                req = Request::post(u.as_str())
-                    .redirect_policy(isahc::config::RedirectPolicy::Limit(10))
-                    .body(Body::empty())?;
-            }
+            println!("Request headers: {:?}", req.headers());
+            let mut resp = self.c.send(req)?;
+            println!("Response header: {:?}", resp.headers());
+            Ok(resp.text()?)
         }
-        req = self.add_default_headers(req);
-        req = self.add_cookie_header(req);
-        let mut resp = req.send()?;
-        println!("Response header: {:?}", resp.headers());
-        let text = resp.text()?;
-        self.save_response_to_cookie(resp);
-        Ok(text)
-    }
 }

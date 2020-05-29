@@ -5,6 +5,7 @@ mod accounts;
 mod cookies;
 mod clients;
 mod states;
+mod saldo_parser;
 
 // use
 use accounts::BcaAccount;
