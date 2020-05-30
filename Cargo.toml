@@ -13,6 +13,7 @@ scraper = "^0.12"
 http = "^0.2"
 url = "^2"
 chrono = "^0.4"
+regex = "^1"
 
 [dependencies.isahc]
 version = "^0.9"
@@ -25,3 +26,6 @@ features = ["attributes"]
 [dependencies.tracing]
 version = "0.1.14"
 features = ["log"]
+
+[dependencies.tracing-subscriber]
+version = "0.2.5"

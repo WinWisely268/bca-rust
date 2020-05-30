@@ -261,7 +261,7 @@ impl Middleware for CookieJar {
                 .headers_mut()
                 .insert(http::header::COOKIE, header.parse().unwrap());
 
-            tracing::info!("Request Header: {:?}", request.headers());
+            tracing::debug!("Request Header: {:?}", request.headers());
         }
 
         request

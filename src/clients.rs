@@ -2,6 +2,7 @@ use crate::cookies::{CookieJar};
 use anyhow::{anyhow, Result};
 use isahc::prelude::*;
 use url::{form_urlencoded, Url};
+use tracing::{instrument, debug, event, Level};
 
 pub enum Endpoints {
     Login,
@@ -109,14 +110,15 @@ impl Client {
         Ok(resp.text()?)
     }
 
+    #[instrument]
     pub fn get(&mut self, u: &Url) -> Result<String> {
         let req = Request::get(u.as_str())
             .redirect_policy(isahc::config::RedirectPolicy::Limit(2))
             .tcp_keepalive(std::time::Duration::from_secs(3600))
             .body(Body::empty())?;
-        println!("Request headers: {:?}", req.headers());
+        debug!("Request headers: {:?}", req.headers());
         let mut resp = self.c.send(req)?;
-        println!("Response headers: {:?}", resp.headers());
+        debug!("Response headers: {:?}", resp.headers());
         Ok(resp.text()?)
     }
 
@@ -127,6 +129,8 @@ impl Client {
         K: AsRef<str>,
         V: AsRef<str>,
         {
+            let span = tracing::span!(Level::DEBUG, "POST REQUEST");
+            let _enter = span.enter();
             let req: Request<Body>;
             match form {
                 Some(f) => {
@@ -145,9 +149,9 @@ impl Client {
                         .body(Body::empty())?;
                 }
             }
-            println!("Request headers: {:?}", req.headers());
+            event!(parent: &span, Level::DEBUG, "Request headers: {:?}", req.headers());
             let mut resp = self.c.send(req)?;
-            println!("Response header: {:?}", resp.headers());
+            event!(parent: &span, Level::DEBUG, "Response headers: {:?}", resp.headers());
             Ok(resp.text()?)
         }
 }

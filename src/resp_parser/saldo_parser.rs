@@ -1,24 +1,26 @@
 use anyhow::Result;
 use scraper::{Html, Selector};
+use tracing::{instrument, warn};
 
+#[instrument]
 pub fn parse_saldo(resp: &str) -> Result<Vec<String>> {
     let doc = Html::parse_document(resp);
-    let table_selector = Selector::parse("tr[bgcolor='#FFFFFF']>td").unwrap();
-
-    let mut text : Vec<String> = vec![];
-
+    let table_selector = Selector::parse("tr[bgcolor='#FFFFFF']>td").expect("html document error");
+    let mut text: Vec<String> = vec![];
     for td in doc.select(&table_selector) {
         let t = td.text().collect::<String>();
         text.push(t);
+    }
+    if text.is_empty() {
+        warn!("cannot parse saldo: no element is found")
     }
     Ok(text)
 }
 
 mod saldo_test {
-    use anyhow::Result;
-    use crate::saldo_parser::parse_saldo;
-#[test]
-    fn parse_saldo_test() -> Result<()>{
+    use super::*;
+    #[test]
+    fn parse_saldo_test() -> Result<()> {
         let html_text = r#"
             <!DOCTYPE html PUBLIC "-//WAPFORUM//DTD XHTML Mobile 1.0//EN" "http://www.wapforum.org/DTD/xhtml-mobile10.dtd">
             <html xmlns="http://www.w3.org/1999/xhtml">
