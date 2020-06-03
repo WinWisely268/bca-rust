@@ -12,20 +12,19 @@ anyhow = "^1.0"
 scraper = "^0.12"
 http = "^0.2"
 url = "^2"
-chrono = "^0.4"
 regex = "^1"
+tui = "0.9"
+termion = "1.5"
+tracing = {version = "0.1.14", features = ["log"] }
+tracing-subscriber = { version = "0.2.5" }
 
 [dependencies.isahc]
 version = "^0.9"
-features = ["middleware-api-preview"]
+features = ["cookies", "psl"]
 
-[dependencies.async-std]
-version = "^1"
-features = ["attributes"]
+[dependencies.smol]
+version = "^0"
 
-[dependencies.tracing]
-version = "0.1.14"
-features = ["log"]
-
-[dependencies.tracing-subscriber]
-version = "0.2.5"
+[profile.release]
+lto = true
+panic = 'abort'

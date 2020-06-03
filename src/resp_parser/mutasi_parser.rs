@@ -1,8 +1,10 @@
 use anyhow::Result;
+use crate::resp_parser::resp_traits::{TuiListCreator, TuiTableCreator, TuiList, TuiTable};
 use regex::Regex;
 use scraper::{ElementRef, Html, Selector};
 use tracing::{debug, instrument};
 use std::borrow::Cow;
+use tui::widgets::{TableState, ListState};
 
 fn get_last_text_el(s: scraper::ElementRef, separator: &str) -> String {
     s.text().collect::<String>().trim()
@@ -23,16 +25,28 @@ pub struct AccountMutasi<'am> {
 }
 
 impl <'am>AccountMutasi<'am> {
-    pub fn new<S>(resp: S) -> Result<Self> 
-    where S: Into<Cow<'am, str>>{
-        let doc: Html = Html::parse_document(&resp.into());
-        let info: AccountInfo<'am> = AccountInfo::from_resp(&doc);
-        let tx: AccountTxes<'am> = AccountTxes::from_resp(&doc)?;
-        let summary: MutationSummary<'am> = MutationSummary::from_resp(&doc)?;
+    pub fn new<S>(resp: S) -> Result<Self>
+        where S: Into<Cow<'am, str>>{
+            let doc: Html = Html::parse_document(&resp.into());
+            let info: AccountInfo<'am> = AccountInfo::from_resp(&doc);
+            let tx: AccountTxes<'am> = AccountTxes::from_resp(&doc)?;
+            let summary: MutationSummary<'am> = MutationSummary::from_resp(&doc)?;
 
-        Ok(AccountMutasi{
-            info, tx, summary,
-        })
+            Ok(AccountMutasi{
+                info, tx, summary,
+            })
+        }
+
+    pub fn account_info_list(&self) -> TuiList {
+        self.info.to_tui_list()
+    }
+
+    pub fn account_tx_table(&self) -> TuiTable {
+        self.tx.to_tui_table()
+    }
+
+    pub fn account_summary_list(&self) -> TuiList {
+        self.summary.to_tui_list()
     }
 }
 
@@ -46,41 +60,63 @@ struct AccountInfo<'a> {
 
 impl <'a>AccountInfo<'a> {
     #[instrument]
-    pub fn from_resp(doc: &Html) -> Self {
+    fn from_resp(doc: &Html) -> Self {
         let mut acc_info = AccountInfo::default();
         let account_info_selector = Selector::parse(
             r#"table[border="0"][width="100%"][cellpadding="0"][cellspacing="0"][class="blue"]"#,
             )
             .expect("html document error");
         for row in doc.select(&account_info_selector) {
-            let acc_num_sel = Selector::parse("tr:nth-child(2)").expect("table has no account number");
-            for acc_num in row.select(&acc_num_sel) {
-                let n = get_last_text_el(acc_num, ".");
-                debug!("Account Number: {}", n);
-                acc_info.account_number = n[1..].to_string().into();
-            }
-            let acc_owner_sel = Selector::parse("tr:nth-child(3)").expect("table has no account owner");
-            for acc_owner in row.select(&acc_owner_sel) {
-                let o = get_last_text_el(acc_owner, ":");
-                debug!("Account Owner: {}", o);
-                acc_info.owner_name = o.into();
-            }
-            let acc_period_sel =
-                Selector::parse("tr:nth-child(4)").expect("table has no tx period specified");
-            for acc_per in row.select(&acc_period_sel) {
-                let p = get_last_text_el(acc_per, ":");
-                debug!("Account Info Period: {}", p);
-                acc_info.period = p.into();
-            }
-            let acc_cur_sel =
-                Selector::parse("tr:nth-child(5)").expect("table has no account currency specified");
-            for acc_cur in row.select(&acc_cur_sel) {
-                let p = get_last_text_el(acc_cur, ":");
-                debug!("Account Currency: {}", p);
-                acc_info.currency = p.into();
-            }
+            smol::run(async {
+                let acc_num_sel = Selector::parse("tr:nth-child(2)").expect("table has no account number");
+                for acc_num in row.select(&acc_num_sel) {
+                    let n = get_last_text_el(acc_num, ".");
+                    debug!("Account Number: {}", n);
+                    acc_info.account_number = n[1..].to_string().into();
+                }
+            });
+            smol::run(async {
+                let acc_owner_sel = Selector::parse("tr:nth-child(3)").expect("table has no account owner");
+                for acc_owner in row.select(&acc_owner_sel) {
+                    let o = get_last_text_el(acc_owner, ":");
+                    debug!("Account Owner: {}", o);
+                    acc_info.owner_name = o.into();
+                }
+            });
+            smol::run(async {
+                let acc_period_sel =
+                    Selector::parse("tr:nth-child(4)").expect("table has no tx period specified");
+                for acc_per in row.select(&acc_period_sel) {
+                    let p = get_last_text_el(acc_per, ":");
+                    debug!("Account Info Period: {}", p);
+                    acc_info.period = p.into();
+                }
+            });
+            smol::run(async {
+                let acc_cur_sel =
+                    Selector::parse("tr:nth-child(5)").expect("table has no account currency specified");
+                for acc_cur in row.select(&acc_cur_sel) {
+                    let p = get_last_text_el(acc_cur, ":");
+                    debug!("Account Currency: {}", p);
+                    acc_info.currency = p.into();
+                }
+            });
         }
         acc_info
+    }
+}
+
+impl<'a> TuiListCreator for AccountInfo<'a> {
+    fn to_tui_list(&self) -> TuiList {
+        TuiList{
+            state: ListState::default(),
+            items: vec![
+                format!("Account Number: {}", self.account_number).into(),
+                format!("Account Owner: {}", self.owner_name).into(),
+                format!("Period: {}", self.period).into(),
+                format!("Account Currency: {}", self.currency).into(),
+            ],
+        }
     }
 }
 
@@ -90,7 +126,7 @@ struct AccountTxes<'a> {
 }
 
 impl<'a> AccountTxes<'a> {
-    pub fn from_resp(doc: &Html) -> Result<Self> {
+    fn from_resp(doc: &Html) -> Result<Self> {
         let mut txes_vec: Vec<AccountTx> = vec![];
         let acc_tx_selector = Selector::parse(
             r#"table[width="100%"][class="blue"]"#,
@@ -115,8 +151,33 @@ impl<'a> AccountTxes<'a> {
     }
 }
 
+impl<'a> TuiTableCreator for AccountTxes<'a> {
+    fn to_tui_table(&self) -> TuiTable {
+        let all_txes : Vec::<Vec<String>>;
+        match self.txes.clone() {
+            Some(txes) => {
+                all_txes = txes.into_iter()
+                    .map(|atx| {
+                        let mut accum = Vec::<String>::new();
+                        accum.push(atx.tx_date.into());
+                        accum.push(atx.tx_note.into());
+                        accum.push(atx.tx_amount.into());
+                        accum.push(atx.tx_category.into());
+                        accum
+                    })
+                .collect::<Vec<Vec<String>>>()
+            },
+            None =>  all_txes = Vec::<Vec<String>>::new(),
+        }
+        TuiTable {
+            state: TableState::default(),
+            items: all_txes,
+        }
+    }
+}
 
-#[derive(Debug, Default)]
+
+#[derive(Clone, Debug, Default)]
 struct AccountTx<'a> {
     // transaction date & notes
     tx_date: Cow<'a, str>,
@@ -126,37 +187,43 @@ struct AccountTx<'a> {
 }
 
 impl<'a> AccountTx<'a> {
-    pub fn from_resp(row: &ElementRef) -> Result<Self> {
+    fn from_resp(row: &ElementRef) -> Result<Self> {
         let mut acc_tx = AccountTx::default();
-        let date_selector = Selector::parse(r#"tr>td[valign="top"]:first-of-type"#).expect("tx date not found");
-        for td in row.select(&date_selector) {
-            let d = td.text().collect::<Cow<'a, str>>();
-            acc_tx.tx_date = d;
-        }
-        let note_amt_selector = Selector::parse("tr>td:first-of-type + td").expect("tx note and amount is invalid");
-        for namt_sel in row.select(&note_amt_selector) {
-            let note_amt = namt_sel.text().collect::<String>();
-            let re_note = Regex::new(r"[\s]{1}+").unwrap();
-            let note = note_amt
-                .split(" ")
-                .map(|s| re_note.replace_all(s, " ").into())
-                .collect::<Vec<String>>()
-                .into_iter()
-                .filter(|s| !s.is_empty())
-                .collect::<Vec<String>>()
-                .join(" ");
-            acc_tx.tx_note = note.into();
-            let tx_amt = note_amt
-                .split(" ")
-                .map(|s| s.to_string()).collect::<Vec<String>>().into_iter().last().unwrap();
-            acc_tx.tx_amount = tx_amt.into();
+        smol::run(async{
+            let date_selector = Selector::parse(r#"tr>td[valign="top"]:first-of-type"#).expect("tx date not found");
+            for td in row.select(&date_selector) {
+                let d = td.text().collect::<Cow<'a, str>>();
+                acc_tx.tx_date = d;
+            }
+        });
+        smol::run(async{
+            let note_amt_selector = Selector::parse("tr>td:first-of-type + td").expect("tx note and amount is invalid");
+            for namt_sel in row.select(&note_amt_selector) {
+                let note_amt = namt_sel.text().collect::<String>();
+                let re_note = Regex::new(r"[\s]{1}+").unwrap();
+                let note = note_amt
+                    .split(" ")
+                    .map(|s| re_note.replace_all(s, " ").into())
+                    .collect::<Vec<String>>()
+                    .into_iter()
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<String>>()
+                    .join(" ");
+                acc_tx.tx_note = note.into();
+                let tx_amt = note_amt
+                    .split(" ")
+                    .map(|s| s.to_string()).collect::<Vec<String>>().into_iter().last().unwrap();
+                acc_tx.tx_amount = tx_amt.into();
 
-        }
-        let category_selector = Selector::parse(r#"tr>td[valign="top"]:last-of-type"#).expect("tx category not found");
-        for cat_el in row.select(&category_selector) {
-            let cat = cat_el.text().collect::<Cow<'a, str>>();
-            acc_tx.tx_category = cat;
-        }
+            }
+        });
+        smol::run(async {
+            let category_selector = Selector::parse(r#"tr>td[valign="top"]:last-of-type"#).expect("tx category not found");
+            for cat_el in row.select(&category_selector) {
+                let cat = cat_el.text().collect::<Cow<'a, str>>();
+                acc_tx.tx_category = cat;
+            }
+        });
         Ok(acc_tx)
     }
 }
@@ -170,7 +237,7 @@ struct MutationSummary<'a> {
 }
 
 impl <'a> MutationSummary<'a> {
-    pub fn from_resp(doc: &Html) -> Result<Self>{
+    fn from_resp(doc: &Html) -> Result<Self>{
         let mut mut_sum = MutationSummary::default();
         let mut_sum_selector = Selector::parse(r#"table[width="97%"][cellspacing="0"][class="blue"]"#)
             .expect("html document error");
@@ -183,6 +250,20 @@ impl <'a> MutationSummary<'a> {
             mut_sum.balance_end = rows.next().unwrap().text().collect::<String>().into();
         }
         Ok(mut_sum)
+    }
+}
+
+impl<'a> TuiListCreator for MutationSummary<'a> {
+    fn to_tui_list(&self) -> TuiList {
+        TuiList{
+            state: ListState::default(),
+            items: vec![
+                format!("Starting Balance: {}", self.balance_begin).into(),
+                format!("Credit Mutations: {}", self.total_credits).into(),
+                format!("Debit Mutations: {}", self.total_debits).into(),
+                format!("Balance: {}", self.balance_end).into()
+            ],
+        }
     }
 }
 

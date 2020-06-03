@@ -1,4 +1,3 @@
-use crate::cookies::{CookieJar};
 use anyhow::{anyhow, Result};
 use isahc::prelude::*;
 use url::{form_urlencoded, Url};
@@ -96,7 +95,7 @@ impl Client {
         let c = HttpClient::builder()
             .redirect_policy(isahc::config::RedirectPolicy::Limit(10))
             .default_headers(&default_headermap())
-            .middleware(CookieJar::default())
+            .cookies()
             .tcp_keepalive(std::time::Duration::from_secs(300))
             .auto_referer()
             .build()?;
