@@ -1,6 +1,6 @@
 use crate::clients::{endpoint_url as epu, Client, Endpoints};
 use crate::resp_parser::{mutasi_parser::AccountMutasi, saldo_parser::AccountBalance};
-use crate::states::AppState;
+use crate::states::states::AppState;
 use anyhow::Result;
 use tracing::{event, Level};
 
@@ -46,7 +46,7 @@ impl BcaAccount {
             ("mobile", "true"),
         ];
         let login_url = epu(Endpoints::Authentication)?;
-        let resp = client.post(&login_url, Some(params))?;
+        client.post(&login_url, Some(params))?;
         state.is_logged_in = true;
         Ok(())
     }
@@ -68,7 +68,7 @@ impl BcaAccount {
         Ok(())
     }
 
-    pub fn get_saldo(&self, client: &mut Client, state: &mut AppState) -> Result<AccountBalance> {
+    pub fn get_saldo(&self, client: &mut Client, state: &mut AppState) -> Result<()> {
         let span = tracing::span!(Level::DEBUG, "Check Current Balance");
         self.check_login_status(client, state)?;
         self.to_menu_page(client)?;
@@ -79,10 +79,10 @@ impl BcaAccount {
 
         state.update_balance(saldo);
 
-        Ok(saldo)
+        Ok(())
     }
 
-    pub fn get_mutasi(&self, client: &mut Client, state: &mut AppState) -> Result<AccountMutasi> {
+    pub fn get_mutasi(&self, client: &mut Client, state: &mut AppState) -> Result<()> {
         let span = tracing::span!(Level::DEBUG, "Check Mutasi");
         self.check_login_status(client, state)?;
         self.to_menu_page(client)?;
@@ -107,7 +107,7 @@ impl BcaAccount {
         event!(parent: &span, Level::DEBUG, "Account Mutasi: {:?}", acc_mut);
         state.update_mutations(acc_mut);
 
-        Ok(acc_mut)
+        Ok(())
     }
 
     pub fn logout(&self, client: &mut Client, state: &mut AppState) -> Result<String> {
