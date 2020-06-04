@@ -38,7 +38,7 @@ fn draw_balance<B: Backend>(f: &mut Frame<B>, app: &mut AppState, area: Rect) {
         .split(area);
     let block = Block::default().borders(Borders::BOTTOM).title("Account Balance");
     f.render_widget(block, area);
-    let balance = app.account_balance.items.iter().map(|i| Text::raw(*i));
+    let balance = app.account_balance.items.iter().map(|i| Text::raw(i));
     let balance = List::new(balance)
         .block(Block::default().borders(Borders::BOTTOM))
         .highlight_style(Style::default().fg(Color::Cyan).modifier(Modifier::BOLD))
@@ -53,7 +53,7 @@ fn draw_statements<B: Backend>(f: &mut Frame<B>, app: &mut AppState, area: Rect)
         .split(area);
     let block = Block::default().borders(Borders::ALL).title("Account Statements");
     f.render_widget(block, area);
-    let statements = app.account_info.items.iter().map(|i| Text::raw(*i));
+    let statements = app.account_info.items.iter().map(|i| Text::raw(i));
     let statements = List::new(statements)
         .block(Block::default().borders(Borders::BOTTOM))
         .highlight_style(Style::default().fg(Color::Yellow).modifier(Modifier::BOLD))
@@ -84,8 +84,8 @@ fn draw_summary<B: Backend>(f: &mut Frame<B>, app: &mut AppState, area: Rect) {
         .split(area);
     let block = Block::default().borders(Borders::BOTTOM).title("Summary");
     f.render_widget(block, area);
-    let summary = app.account_summary.items.iter().map(|i| Text::raw(*i));
-    let summary = List::new(balance)
+    let summary = app.account_summary.items.iter().map(|i| Text::raw(i));
+    let summary = List::new(summary)
         .block(Block::default().borders(Borders::BOTTOM))
         .highlight_style(Style::default().fg(Color::LightGreen).modifier(Modifier::BOLD))
         .highlight_symbol("➜ ");

@@ -60,24 +60,12 @@ fn main() -> Result<()> {
     terminal.hide_cursor()?;
 
     loop {
-        terminal.draw(|mut f| ui::draw(&mut f, &mut app_state))?;
+        terminal.draw(|mut f| ui::ui::draw(&mut f, &mut app_state))?;
 
         match events.next()? {
             Event::Input(key) => match key {
                 Key::Char('q') => {
                     break;
-                }
-                Key::Up => {
-                    app_state.on_up();
-                }
-                Key::Down => {
-                    app_state.on_down();
-                }
-                Key::Left => {
-                    app_state.on_left();
-                }
-                Key::Right => {
-                    app_state.on_right();
                 }
                 _ => {}
             },
@@ -87,6 +75,5 @@ fn main() -> Result<()> {
             }
         }
     }
-
     Ok(())
 }
