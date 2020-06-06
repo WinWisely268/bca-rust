@@ -1,5 +1,5 @@
+use crate::resp_parser::resp_traits::{TuiList, TuiListCreator};
 use anyhow::Result;
-use crate::resp_parser::resp_traits::{TuiListCreator, TuiList};
 use scraper::{Html, Selector};
 use std::borrow::Cow;
 
@@ -12,30 +12,45 @@ pub struct AccountBalance<'a> {
 
 impl<'a> AccountBalance<'a> {
     pub fn new<S>(resp: S) -> Result<Self>
-        where S: Into<Cow<'a, str>> {
-            let mut acc_bal = AccountBalance::default();
-            let doc = Html::parse_document(&resp.into());
-            let table_selector = Selector::parse("tr[bgcolor='#FFFFFF']>td")
-                .expect("saldo html document error");
-            let mut rows = doc.select(&table_selector);
-            acc_bal.account_number = rows.next().expect("no saldo rows")
-                .text().collect::<String>().into();
-            acc_bal.account_currency = rows.next().expect("no saldo rows").text().collect::<String>().into();
-            acc_bal.account_balance = rows.next().expect("no saldo rows").text().collect::<String>().into();
-            Ok(acc_bal)
-        }
+    where
+        S: Into<Cow<'a, str>>,
+    {
+        let mut acc_bal = AccountBalance::default();
+        let doc = Html::parse_document(&resp.into());
+        let table_selector =
+            Selector::parse("tr[bgcolor='#FFFFFF']>td").expect("saldo html document error");
+        let mut rows = doc.select(&table_selector);
+        acc_bal.account_number = rows
+            .next()
+            .expect("no saldo rows")
+            .text()
+            .collect::<String>()
+            .into();
+        acc_bal.account_currency = rows
+            .next()
+            .expect("no saldo rows")
+            .text()
+            .collect::<String>()
+            .into();
+        acc_bal.account_balance = rows
+            .next()
+            .expect("no saldo rows")
+            .text()
+            .collect::<String>()
+            .into();
+        Ok(acc_bal)
+    }
 
     pub fn account_balance_list(&self) -> TuiList {
         self.to_tui_list()
     }
 }
 
-impl <'a> TuiListCreator for AccountBalance<'a> {
+impl<'a> TuiListCreator for AccountBalance<'a> {
     fn to_tui_list(&self) -> TuiList {
         TuiList::with_items(vec![
-                format!("{}", self.account_number).into(),
-                format!("{} {}", self.account_currency, self.account_balance).into(),
-            ]
-        )
+            format!("{}", self.account_number).into(),
+            format!("{} {}", self.account_currency, self.account_balance).into(),
+        ])
     }
 }

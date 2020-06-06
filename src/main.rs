@@ -3,33 +3,25 @@
 // modules
 mod accounts;
 mod clients;
-mod states;
-mod resp_parser;
-mod ui;
 mod events;
+mod resp_parser;
+mod states;
+mod ui;
 
 // use
+use crate::events::event::{Config, Event, Events};
 use accounts::BcaAccount;
 use anyhow::Result;
 use clients::Client;
-use crate::events::event::{Config, Event, Events};
 use states::states::{AppState, InputMode};
 use std::io::{self, Write};
 use std::time::Duration;
 use structopt::StructOpt;
 use termion::{
-    cursor::Goto,
-    event::Key,
-    input::MouseTerminal,
-    raw::IntoRawMode,
-    screen::AlternateScreen,
+    cursor::Goto, event::Key, input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen,
 };
-use tui::{
-    backend::TermionBackend,
-    Terminal,
-};
+use tui::{backend::TermionBackend, Terminal};
 use unicode_width::UnicodeWidthStr;
-
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "env")]
@@ -46,8 +38,8 @@ fn main() -> Result<()> {
     let acc = BcaAccount::new(opt.user, opt.password);
     let mut new_client = Client::new()?;
     acc.login(&mut new_client, &mut app_state)?;
-    let events = Events::with_config(Config{
-        tick_rate: Duration::from_millis(1000),
+    let events = Events::with_config(Config {
+        tick_rate: Duration::from_millis(2000),
         ..Config::default()
     });
 
@@ -64,7 +56,11 @@ fn main() -> Result<()> {
     loop {
         terminal.draw(|mut f| ui::ui::draw(&mut f, &mut app_state))?;
 
-        write!(terminal.backend_mut(), "{}", Goto(4 + app_state.input_string.width() as u16, 5))?;
+        write!(
+            terminal.backend_mut(),
+            "{}",
+            Goto(4 + app_state.input_string.width() as u16, 5)
+        )?;
         io::stdout().flush().ok();
 
         if let Event::Input(input) = events.next()? {
@@ -80,7 +76,7 @@ fn main() -> Result<()> {
                     }
                     Key::Up => app_state.on_up(),
                     Key::Down => app_state.on_down(),
-                    _ => {},
+                    _ => {}
                 },
                 InputMode::Editing => match input {
                     Key::Char('\n') => {
@@ -97,15 +93,13 @@ fn main() -> Result<()> {
                         events.enable_exit_key();
                     }
                     _ => {}
-                }
+                },
             }
-
         }
         if let Event::Tick = events.next()? {
             acc.get_saldo(&mut new_client, &mut app_state)?;
             acc.get_mutasi(&mut new_client, &mut app_state)?;
         }
-
     }
     Ok(())
 }

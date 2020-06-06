@@ -52,21 +52,15 @@ impl TuiTable {
 
 #[derive(Clone)]
 pub struct TuiList {
-    pub items: Vec::<String>,
+    pub items: Vec<String>,
 }
 
 impl TuiList {
     pub fn new() -> TuiList {
-        TuiList {
-            items: Vec::new(),
-        }
+        TuiList { items: Vec::new() }
     }
 
     pub fn with_items(items: Vec<String>) -> TuiList {
-        TuiList {
-            items,
-        }
+        TuiList { items }
     }
 }
-
-

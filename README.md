@@ -1,6 +1,8 @@
 # Bank BCA Individu Unofficial CLI
 
-Dashboard to get all transactions, mutations, balances.
+Dashboard to get all transactions, statements / mutations, balances.
+
+![dashboard-screenie](screenshots/bca-rust.png)
 
 
 # TODO

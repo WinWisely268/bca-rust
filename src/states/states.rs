@@ -1,10 +1,10 @@
-use anyhow::{Result, anyhow};
 use crate::resp_parser::{
-    saldo_parser::AccountBalance,
     mutasi_parser::AccountMutasi,
     resp_traits::{TuiList, TuiTable},
+    saldo_parser::AccountBalance,
 };
-use chrono::{DateTime, NaiveDate, Duration, offset::Local};
+use anyhow::Result;
+use chrono::{offset::Local, DateTime, Duration, NaiveDate};
 
 #[derive(Clone)]
 pub enum InputMode {
@@ -28,7 +28,7 @@ pub struct AppState {
 impl AppState {
     pub fn new() -> Self {
         let now = Local::now();
-        AppState{
+        AppState {
             // is logged in to klikbca individual
             input_string: String::new(),
             input_mode: InputMode::Normal,
@@ -52,19 +52,18 @@ impl AppState {
         self.account_summary = mutasi.account_summary_list();
     }
 
-    pub fn update_dates(&mut self) -> Result<()>{
-        let dates = self.input_string.split("-").into_iter()
-            .map(|s| s.trim()).collect::<Vec<&str>>();
-        if dates.len() != 2 {
-            return Err(anyhow!("Error: no date range detected"));
-        }
-        if let Some(d) = dates.first() {
-            let start_date = NaiveDate::parse_from_str(d, "%d/%m/%Y")?;
-            self.start_date = start_date;
-        }
-        if let Some(d) = dates.last() {
-            let end_date = NaiveDate::parse_from_str(d, "%d/%m/%Y")?;
-            self.end_date = end_date;
+    pub fn update_dates(&mut self) -> Result<()> {
+        let dates = self.input_string.trim();
+        let end_date = NaiveDate::parse_from_str(dates, "%d/%m/%Y")?;
+        self.end_date = end_date;
+        let start = end_date.checked_sub_signed(Duration::days(7));
+        match start {
+            Some(d) => {
+                self.start_date = d;
+            }
+            None => {
+                self.start_date = end_date;
+            }
         }
         Ok(())
     }
@@ -81,7 +80,6 @@ impl AppState {
         self.account_mutations.next();
     }
 }
-
 
 fn add_date(cur: DateTime<Local>, dur: Duration) -> NaiveDate {
     let added_now = cur.checked_add_signed(dur);

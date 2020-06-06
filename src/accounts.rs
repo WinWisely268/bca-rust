@@ -85,8 +85,8 @@ impl BcaAccount {
         client.post(&main_menu_url, Some(params))?;
 
         let start_dt = state.start_date.format("%d").to_string();
-        let start_mt= state.start_date.format("%m").to_string();
-        let start_yr =  state.start_date.format("%Y").to_string();
+        let start_mt = state.start_date.format("%m").to_string();
+        let start_yr = state.start_date.format("%Y").to_string();
         let end_dt = state.end_date.format("%d").to_string();
         let end_mt = state.end_date.format("%m").to_string();
         let end_yr = state.end_date.format("%Y").to_string();
@@ -110,10 +110,10 @@ impl BcaAccount {
         Ok(())
     }
 
-    pub fn logout(&self, client: &mut Client, state: &mut AppState) -> Result<String> {
+    pub fn logout(&self, client: &mut Client, state: &mut AppState) -> Result<()> {
         let logout_url = epu(Endpoints::Authentication)?;
-        let resp = client.get(&logout_url)?;
+        client.get(&logout_url)?;
         state.is_logged_in = false;
-        Ok(resp)
+        Ok(())
     }
 }

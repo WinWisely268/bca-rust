@@ -13,8 +13,8 @@ pub enum Endpoints {
 // creates & validates url from string literal
 pub fn build_url<I>(base: &str, path: I) -> Result<Url>
 where
-I: IntoIterator,
-I::Item: AsRef<str>,
+    I: IntoIterator,
+    I::Item: AsRef<str>,
 {
     let mut url = Url::parse(base)?;
     url.path_segments_mut()
@@ -29,9 +29,7 @@ pub fn endpoint_url(e: Endpoints) -> Result<Url> {
     match e {
         Endpoints::Login => build_url(base_url, &["login.jsp"]),
         Endpoints::Authentication => build_url(base_url, &["authentication.do"]),
-        Endpoints::AccountStatement => {
-            build_url(base_url, &["accountstmt.do"])
-        },
+        Endpoints::AccountStatement => build_url(base_url, &["accountstmt.do"]),
         Endpoints::BalanceInquiry => build_url(base_url, &["balanceinquiry.do"]),
         Endpoints::PubIp => build_url("http://icanhazip.com", &[""]),
     }
@@ -49,35 +47,33 @@ fn default_headermap() -> http::HeaderMap {
     new_headers.insert(
         http::header::UPGRADE_INSECURE_REQUESTS,
         "1".parse().unwrap(),
-        );
+    );
 
     new_headers.insert(
         http::header::ORIGIN,
         "https://m.klikbca.com".parse().unwrap(),
-        );
+    );
 
-    new_headers.insert(
-        http::header::HOST,
-        "m.klikbca.com".parse().unwrap(),
-        );
+    new_headers.insert(http::header::HOST, "m.klikbca.com".parse().unwrap());
 
     new_headers.insert(
         http::header::ACCEPT,
-        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8".parse().unwrap(),
-        );
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+            .parse()
+            .unwrap(),
+    );
 
     new_headers.insert(
         http::header::ACCEPT_LANGUAGE,
         "en-US,en;q=0.5".parse().unwrap(),
-        );
+    );
 
     new_headers.insert(
         http::header::ACCEPT_ENCODING,
         "gzip, deflate, br".parse().unwrap(),
-        );
+    );
 
     new_headers
-
 }
 
 // Req is the reusable http client for the entire program.
@@ -98,9 +94,8 @@ impl Client {
             .tcp_keepalive(std::time::Duration::from_secs(300))
             .auto_referer()
             .build()?;
-        Ok(Client{ c })
+        Ok(Client { c })
     }
-
 
     pub fn simple_get(&self, u: &Url) -> Result<String> {
         let req = Request::get(u.as_str()).body(Body::empty())?;
@@ -118,31 +113,31 @@ impl Client {
     }
 
     pub fn post<I, K, V>(&mut self, u: &Url, form: Option<I>) -> Result<String>
-        where
+    where
         I: IntoIterator,
         I::Item: core::borrow::Borrow<(K, V)>,
         K: AsRef<str>,
         V: AsRef<str>,
-        {
-            let req: Request<Body>;
-            match form {
-                Some(f) => {
-                    let mut form_data = form_urlencoded::Serializer::new(String::new());
-                    form_data.extend_pairs(f);
-                    let form_string: String = form_data.finish().into();
-                    req = Request::post(u.as_str())
-                        .redirect_policy(isahc::config::RedirectPolicy::Limit(5))
-                        .tcp_keepalive(std::time::Duration::from_secs(3600))
-                        .body(Body::from_bytes(form_string.into_bytes()))?;
-                }
-                None => {
-                    req = Request::post(u.as_str())
-                        .redirect_policy(isahc::config::RedirectPolicy::Limit(5))
-                        .tcp_keepalive(std::time::Duration::from_secs(3600))
-                        .body(Body::empty())?;
-                }
+    {
+        let req: Request<Body>;
+        match form {
+            Some(f) => {
+                let mut form_data = form_urlencoded::Serializer::new(String::new());
+                form_data.extend_pairs(f);
+                let form_string: String = form_data.finish().into();
+                req = Request::post(u.as_str())
+                    .redirect_policy(isahc::config::RedirectPolicy::Limit(5))
+                    .tcp_keepalive(std::time::Duration::from_secs(3600))
+                    .body(Body::from_bytes(form_string.into_bytes()))?;
             }
-            let mut resp = self.c.send(req)?;
-            Ok(resp.text()?)
+            None => {
+                req = Request::post(u.as_str())
+                    .redirect_policy(isahc::config::RedirectPolicy::Limit(5))
+                    .tcp_keepalive(std::time::Duration::from_secs(3600))
+                    .body(Body::empty())?;
+            }
         }
+        let mut resp = self.c.send(req)?;
+        Ok(resp.text()?)
+    }
 }
