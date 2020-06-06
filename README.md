@@ -7,5 +7,5 @@ Dashboard to get all transactions, mutations, balances.
 - [x] Implements login and logout
 - [x] Implement Transaction 
 - [x] Implement Balance Checking
-- [ ] Implement Dashboard using tui-rs
+- [x] Implement Dashboard using tui-rs
 - [ ] Implement Bank Transfer

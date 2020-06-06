@@ -32,12 +32,10 @@ impl<'a> AccountBalance<'a> {
 
 impl <'a> TuiListCreator for AccountBalance<'a> {
     fn to_tui_list(&self) -> TuiList {
-        TuiList{
-            state: tui::widgets::ListState::default(),
-            items: vec![
-                format!("{} {} {}", self.account_number ,self.account_currency, self.account_balance)
-                    .into(),
+        TuiList::with_items(vec![
+                format!("{}", self.account_number).into(),
+                format!("{} {}", self.account_currency, self.account_balance).into(),
             ]
-        }
+        )
     }
 }

@@ -13,18 +13,22 @@ use accounts::BcaAccount;
 use anyhow::Result;
 use clients::Client;
 use crate::events::event::{Config, Event, Events};
-use states::states::AppState;
+use states::states::{AppState, InputMode};
+use std::io::{self, Write};
 use std::time::Duration;
 use structopt::StructOpt;
-use termion::{event::Key, input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen};
-use tracing::Level;
+use termion::{
+    cursor::Goto,
+    event::Key,
+    input::MouseTerminal,
+    raw::IntoRawMode,
+    screen::AlternateScreen,
+};
 use tui::{
     backend::TermionBackend,
-    layout::{Constraint, Layout},
-    style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Row, Table, TableState},
     Terminal,
 };
+use unicode_width::UnicodeWidthStr;
 
 
 #[derive(Debug, StructOpt)]
@@ -38,17 +42,15 @@ struct ReqOpt {
 
 fn main() -> Result<()> {
     let opt = ReqOpt::from_args();
-    tracing_subscriber::fmt()
-        .with_max_level(Level::INFO)
-        .init();
     let mut app_state = AppState::new();
     let acc = BcaAccount::new(opt.user, opt.password);
     let mut new_client = Client::new()?;
     acc.login(&mut new_client, &mut app_state)?;
     let events = Events::with_config(Config{
-        tick_rate: Duration::from_millis(5000),
+        tick_rate: Duration::from_millis(1000),
         ..Config::default()
     });
+
     acc.get_saldo(&mut new_client, &mut app_state)?;
     acc.get_mutasi(&mut new_client, &mut app_state)?;
 
@@ -62,18 +64,48 @@ fn main() -> Result<()> {
     loop {
         terminal.draw(|mut f| ui::ui::draw(&mut f, &mut app_state))?;
 
-        match events.next()? {
-            Event::Input(key) => match key {
-                Key::Char('q') => {
-                    break;
+        write!(terminal.backend_mut(), "{}", Goto(4 + app_state.input_string.width() as u16, 5))?;
+        io::stdout().flush().ok();
+
+        if let Event::Input(input) = events.next()? {
+            match app_state.input_mode {
+                InputMode::Normal => match input {
+                    Key::Char('e') => {
+                        app_state.input_mode = InputMode::Editing;
+                        events.disable_exit_key();
+                    }
+                    Key::Char('q') => {
+                        acc.logout(&mut new_client, &mut app_state)?;
+                        break;
+                    }
+                    Key::Up => app_state.on_up(),
+                    Key::Down => app_state.on_down(),
+                    _ => {},
+                },
+                InputMode::Editing => match input {
+                    Key::Char('\n') => {
+                        app_state.update_dates()?;
+                    }
+                    Key::Char(c) => {
+                        app_state.input_string.push(c);
+                    }
+                    Key::Backspace => {
+                        app_state.input_string.pop();
+                    }
+                    Key::Esc => {
+                        app_state.input_mode = InputMode::Normal;
+                        events.enable_exit_key();
+                    }
+                    _ => {}
                 }
-                _ => {}
-            },
-            Event::Tick => {
-                acc.get_saldo(&mut new_client, &mut app_state)?;
-                acc.get_mutasi(&mut new_client, &mut app_state)?;
             }
+
         }
+        if let Event::Tick = events.next()? {
+            acc.get_saldo(&mut new_client, &mut app_state)?;
+            acc.get_mutasi(&mut new_client, &mut app_state)?;
+        }
+
     }
     Ok(())
 }

@@ -2,7 +2,6 @@ use crate::clients::{endpoint_url as epu, Client, Endpoints};
 use crate::resp_parser::{mutasi_parser::AccountMutasi, saldo_parser::AccountBalance};
 use crate::states::states::AppState;
 use anyhow::Result;
-use tracing::{event, Level};
 
 // BcaAccount contains username and password
 #[derive(Copy, Clone, Debug)]
@@ -47,17 +46,15 @@ impl BcaAccount {
         ];
         let login_url = epu(Endpoints::Authentication)?;
         client.post(&login_url, Some(params))?;
-        state.is_logged_in = true;
+        state.toggle_login();
         Ok(())
     }
 
     fn check_login_status(&self, client: &mut Client, state: &mut AppState) -> Result<()> {
-        let span = tracing::span!(Level::DEBUG, "Check Login Status");
         if !state.is_logged_in {
-            event!(parent: &span, Level::DEBUG, "not logged in, login first");
             self.login(client, state)?;
         }
-        state.is_logged_in = true;
+        state.toggle_login();
         Ok(())
     }
 
@@ -69,13 +66,11 @@ impl BcaAccount {
     }
 
     pub fn get_saldo(&self, client: &mut Client, state: &mut AppState) -> Result<()> {
-        let span = tracing::span!(Level::DEBUG, "Check Current Balance");
         self.check_login_status(client, state)?;
         self.to_menu_page(client)?;
         let saldo_url = epu(Endpoints::BalanceInquiry)?;
         let resp = client.post(&saldo_url, None::<Vec<(&str, &str)>>)?;
         let saldo = AccountBalance::new(resp)?;
-        event!(parent: &span, Level::DEBUG, "Current Balance / Saldo: {:?}", saldo);
 
         state.update_balance(saldo);
 
@@ -83,38 +78,41 @@ impl BcaAccount {
     }
 
     pub fn get_mutasi(&self, client: &mut Client, state: &mut AppState) -> Result<()> {
-        let span = tracing::span!(Level::DEBUG, "Check Mutasi");
         self.check_login_status(client, state)?;
         self.to_menu_page(client)?;
         let main_menu_url = epu(Endpoints::AccountStatement)?;
         let mut params = vec![("value(actions)", "acct_stmt")];
         client.post(&main_menu_url, Some(params))?;
 
+        let start_dt = state.start_date.format("%d").to_string();
+        let start_mt= state.start_date.format("%m").to_string();
+        let start_yr =  state.start_date.format("%Y").to_string();
+        let end_dt = state.end_date.format("%d").to_string();
+        let end_mt = state.end_date.format("%m").to_string();
+        let end_yr = state.end_date.format("%Y").to_string();
+
         params = vec![
             ("r1", "1"),
             ("value(D1)", "0"),
-            ("value(startDt)", "23"),
-            ("value(startMt)", "05"),
-            ("value(startYr)", "2020"),
-            ("value(endDt)", "30"),
-            ("value(endMt)", "05"),
-            ("value(endYr)", "2020"),
+            ("value(startDt)", &start_dt),
+            ("value(startMt)", &start_mt),
+            ("value(startYr)", &start_yr),
+            ("value(endDt)", &end_dt),
+            ("value(endMt)", &end_mt),
+            ("value(endYr)", &end_yr),
             ("value(actions)", "acctstmtview"),
         ];
 
         let resp = client.post(&main_menu_url, Some(params))?;
         let acc_mut = AccountMutasi::new(resp)?;
-        event!(parent: &span, Level::DEBUG, "Account Mutasi: {:?}", acc_mut);
         state.update_mutations(acc_mut);
 
         Ok(())
     }
 
     pub fn logout(&self, client: &mut Client, state: &mut AppState) -> Result<String> {
-        let span = tracing::span!(Level::DEBUG, "Logout Operation");
         let logout_url = epu(Endpoints::Authentication)?;
         let resp = client.get(&logout_url)?;
-        event!(parent: &span, Level::DEBUG, "Response triggered: {}", resp);
         state.is_logged_in = false;
         Ok(resp)
     }

@@ -1,10 +1,9 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use crate::resp_parser::resp_traits::{TuiListCreator, TuiTableCreator, TuiList, TuiTable};
 use regex::Regex;
 use scraper::{ElementRef, Html, Selector};
-use tracing::{debug, instrument};
 use std::borrow::Cow;
-use tui::widgets::{TableState, ListState};
+use tui::widgets::TableState;
 
 fn get_last_text_el(s: scraper::ElementRef, separator: &str) -> String {
     s.text().collect::<String>().trim()
@@ -28,7 +27,7 @@ impl <'am>AccountMutasi<'am> {
     pub fn new<S>(resp: S) -> Result<Self>
         where S: Into<Cow<'am, str>>{
             let doc: Html = Html::parse_document(&resp.into());
-            let info: AccountInfo<'am> = AccountInfo::from_resp(&doc);
+            let info: AccountInfo<'am> = AccountInfo::from_resp(&doc)?;
             let tx: AccountTxes<'am> = AccountTxes::from_resp(&doc)?;
             let summary: MutationSummary<'am> = MutationSummary::from_resp(&doc)?;
 
@@ -59,8 +58,7 @@ struct AccountInfo<'a> {
 }
 
 impl <'a>AccountInfo<'a> {
-    #[instrument]
-    fn from_resp(doc: &Html) -> Self {
+    fn from_resp(doc: &Html) -> Result<Self> {
         let mut acc_info = AccountInfo::default();
         let account_info_selector = Selector::parse(
             r#"table[border="0"][width="100%"][cellpadding="0"][cellspacing="0"][class="blue"]"#,
@@ -71,7 +69,6 @@ impl <'a>AccountInfo<'a> {
                 let acc_num_sel = Selector::parse("tr:nth-child(2)").expect("table has no account number");
                 for acc_num in row.select(&acc_num_sel) {
                     let n = get_last_text_el(acc_num, ".");
-                    debug!("Account Number: {}", n);
                     acc_info.account_number = n[1..].to_string().into();
                 }
             });
@@ -79,7 +76,6 @@ impl <'a>AccountInfo<'a> {
                 let acc_owner_sel = Selector::parse("tr:nth-child(3)").expect("table has no account owner");
                 for acc_owner in row.select(&acc_owner_sel) {
                     let o = get_last_text_el(acc_owner, ":");
-                    debug!("Account Owner: {}", o);
                     acc_info.owner_name = o.into();
                 }
             });
@@ -88,7 +84,6 @@ impl <'a>AccountInfo<'a> {
                     Selector::parse("tr:nth-child(4)").expect("table has no tx period specified");
                 for acc_per in row.select(&acc_period_sel) {
                     let p = get_last_text_el(acc_per, ":");
-                    debug!("Account Info Period: {}", p);
                     acc_info.period = p.into();
                 }
             });
@@ -97,24 +92,22 @@ impl <'a>AccountInfo<'a> {
                     Selector::parse("tr:nth-child(5)").expect("table has no account currency specified");
                 for acc_cur in row.select(&acc_cur_sel) {
                     let p = get_last_text_el(acc_cur, ":");
-                    debug!("Account Currency: {}", p);
                     acc_info.currency = p.into();
                 }
             });
         }
-        acc_info
+        Ok(acc_info)
     }
 }
 
 impl<'a> TuiListCreator for AccountInfo<'a> {
     fn to_tui_list(&self) -> TuiList {
         TuiList{
-            state: ListState::default(),
             items: vec![
-                format!("Account Number: {}", self.account_number).into(),
-                format!("Account Owner: {}", self.owner_name).into(),
-                format!("Period: {}", self.period).into(),
-                format!("Account Currency: {}", self.currency).into(),
+                format!("Account Number:\t{}", self.account_number).into(),
+                format!("Account Owner:\t{}", self.owner_name).into(),
+                format!("Period:\t{}", self.period).into(),
+                format!("Account Currency:\t{}", self.currency).into(),
             ],
         }
     }
@@ -244,6 +237,10 @@ impl <'a> MutationSummary<'a> {
         for tr in doc.select(&mut_sum_selector) {
             let sum_selector = Selector::parse(r#"tr>td[align="left"]:nth-of-type(n+2)"#).expect("table mutation summary is not found");
             let mut rows = tr.select(&sum_selector);
+            let cloned_rows = rows.clone();
+            if cloned_rows.count() != 4 {
+                return Err(anyhow!("Mutation summary elements not found"));
+            }
             mut_sum.balance_begin = rows.next().unwrap().text().collect::<String>().into();
             mut_sum.total_credits = rows.next().unwrap().text().collect::<String>().into();
             mut_sum.total_debits = rows.next().unwrap().text().collect::<String>().into();
@@ -256,12 +253,15 @@ impl <'a> MutationSummary<'a> {
 impl<'a> TuiListCreator for MutationSummary<'a> {
     fn to_tui_list(&self) -> TuiList {
         TuiList{
-            state: ListState::default(),
             items: vec![
-                format!("Starting Balance: {}", self.balance_begin).into(),
-                format!("Credit Mutations: {}", self.total_credits).into(),
-                format!("Debit Mutations: {}", self.total_debits).into(),
-                format!("Balance: {}", self.balance_end).into()
+                "Starting Balance".into(),
+                format!("{}", self.balance_begin).into(),
+                "Credit Mutations".into(),
+                format!("{}", self.total_credits).into(),
+                "Debit Mutations".into(),
+                format!("{}", self.total_debits).into(),
+                "Balance".into(),
+                format!("{}", self.balance_end).into()
             ],
         }
     }
